@@ -1,287 +1,131 @@
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
-import androidx.compose.animation.core.Animatable
-import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.*
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
-import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
+import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.tooling.preview.Preview
-import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.graphics.drawscope.drawCircle
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
-import kotlinx.coroutines.launch
-import kotlin.math.cos
-import kotlin.math.sin
+import kotlinx.coroutines.delay
 
-// MainActivity class, the entry point for the Android application.
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        // Set the content of the activity to our Composable function.
         setContent {
-            EyeMovementAppTheme {
-                Surface(
-                    modifier = Modifier.fillMaxSize(),
-                    color = MaterialTheme.colorScheme.background
-                ) {
-                    EyeMovementScreen()
-                }
-            }
+            EyeMovementApp()
         }
     }
 }
 
-// Custom theme for the application.
 @Composable
-fun EyeMovementAppTheme(content: @Composable () -> Unit) {
-    MaterialTheme(
-        colorScheme = MaterialTheme.colorScheme.copy(
-            primary = Color(0xFFE53935), // Red for buttons
-            background = Color(0xFFE0E0E0) // Light grey background as in the image
-        ),
-        content = content
-    )
-}
-
-// Data class to represent the eye's pupil position.
-data class PupilPosition(val x: Float, val y: Float)
-
-// Main Composable function for the eye movement screen.
-@Composable
-fun EyeMovementScreen() {
-    // State for the pupil position, animated using Animatable.
-    val pupilX = remember { Animatable(0f) }
-    val pupilY = remember { Animatable(0f) }
-    val coroutineScope = rememberCoroutineScope()
-
-    // Function to move the pupils to a new target position.
-    fun movePupils(targetX: Float, targetY: Float) {
-        coroutineScope.launch {
-            // Animate the pupil's X and Y coordinates simultaneously.
-            launch { pupilX.animateTo(targetX, animationSpec = tween(durationMillis = 300)) }
-            launch { pupilY.animateTo(targetY, animationSpec = tween(durationMillis = 300)) }
-        }
-    }
+fun EyeMovementApp() {
+    var eyeOffsetX by remember { mutableStateOf(0f) }
+    var eyeOffsetY by remember { mutableStateOf(0f) }
+    var leftPupilSize by remember { mutableStateOf(20f) }
+    var rightPupilSize by remember { mutableStateOf(20f) }
 
     Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background)
-            .padding(16.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.SpaceAround
+        verticalArrangement = Arrangement.SpaceAround,
+        modifier = Modifier.fillMaxSize().background(Color(0xFFEDEDED))
     ) {
-        Spacer(modifier = Modifier.weight(1f)) // Pushes content towards center
+        Spacer(modifier = Modifier.height(16.dp))
 
-        // Row for the eyes
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.Center,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Eye(pupilX.value, pupilY.value)
-            Spacer(modifier = Modifier.width(32.dp)) // Space between eyes
-            Eye(pupilX.value, pupilY.value)
+        Row(horizontalArrangement = Arrangement.Center, modifier = Modifier.fillMaxWidth()) {
+            Eye(eyeOffsetX, eyeOffsetY, leftPupilSize)
+            Spacer(modifier = Modifier.width(40.dp))
+            Eye(eyeOffsetX, eyeOffsetY, rightPupilSize)
         }
 
-        Spacer(modifier = Modifier.weight(1f)) // Pushes content towards center
+        DirectionControls(
+            onDirectionClick = { dx, dy ->
+                eyeOffsetX = dx
+                eyeOffsetY = dy
+            }
+        )
 
-        // Grid for directional control buttons
-        DirectionalButtons(onDirectionSelected = { dx, dy ->
-            // Calculate the new target position for the pupils.
-            // Limiting the movement range to keep pupils within the eye.
-            val maxMovement = 0.5f // Max movement as a fraction of eye radius
-            val targetX = dx * maxMovement
-            val targetY = dy * maxMovement
-            movePupils(targetX, targetY)
+        TorchControls(onTorchClick = { eye ->
+            if (eye == "left") {
+                leftPupilSize = 8f
+                rightPupilSize = 8f
+            } else {
+                rightPupilSize = 8f
+                leftPupilSize = 8f
+            }
+            LaunchedEffect(Unit) {
+                delay(1000)
+                leftPupilSize = 20f
+                rightPupilSize = 20f
+            }
         })
-
-        Spacer(modifier = Modifier.weight(0.5f)) // Pushes content towards center
-
-        // Reset button
-        Button(
-            onClick = { movePupils(0f, 0f) }, // Reset to center (0,0)
-            colors = ButtonDefaults.buttonColors(containerColor = Color.Gray),
-            modifier = Modifier
-                .padding(bottom = 16.dp)
-                .width(120.dp)
-                .height(50.dp)
-                .clip(CircleShape) // Apply rounded corners
-        ) {
-            Text("Reset", color = Color.White, fontSize = 18.sp)
-        }
     }
 }
 
-// Composable function for a single eye.
 @Composable
-fun Eye(pupilOffsetX: Float, pupilOffsetY: Float) {
-    val eyeSize = 120.dp // Size of the entire eye
-    val pupilSize = eyeSize / 3 // Size of the pupil
-
+fun Eye(offsetX: Float, offsetY: Float, pupilSize: Float) {
     Box(
         modifier = Modifier
-            .size(eyeSize)
-            .clip(CircleShape) // Clip the eye to a circular shape
-            .background(Color.White) // White part of the eye
-            .padding(4.dp) // Inner padding for the iris/pupil
+            .size(100.dp)
+            .background(Color.White, CircleShape)
+            .padding(10.dp),
+        contentAlignment = Alignment.Center
     ) {
-        Canvas(modifier = Modifier.fillMaxSize()) {
-            val eyeCenter = Offset(size.width / 2, size.height / 2)
-            val eyeRadius = size.width / 2
-
-            // Draw the iris (outer colored part)
-            val irisRadius = eyeRadius * 0.6f
-            drawCircle(
-                color = Color(0xFF6D4C41), // Brown color for iris
-                radius = irisRadius,
-                center = eyeCenter
-            )
-
-            // Calculate pupil position based on offset and eye radius
-            // Pupil movement is relative to the iris center, scaled by irisRadius
-            val maxPupilMovement = irisRadius - (pupilSize.toPx() / 2)
-            val currentPupilX = eyeCenter.x + (pupilOffsetX * maxPupilMovement)
-            val currentPupilY = eyeCenter.y + (pupilOffsetY * maxPupilMovement)
-
-            // Draw the pupil (black center part)
+        Canvas(modifier = Modifier.size(100.dp)) {
             drawCircle(
                 color = Color.Black,
-                radius = pupilSize.toPx() / 2,
-                center = Offset(currentPupilX, currentPupilY)
-            )
-
-            // Optional: Draw a highlight on the pupil for realism
-            drawCircle(
-                color = Color.White.copy(alpha = 0.6f),
-                radius = pupilSize.toPx() / 4,
-                center = Offset(currentPupilX + pupilSize.toPx() / 4, currentPupilY - pupilSize.toPx() / 4)
-            )
-
-            // Eyelid lines (simplified, can be more complex)
-            val eyelidColor = Color.Black
-            val eyelidThickness = 2.dp.toPx()
-
-            // Top eyelid
-            drawLine(
-                color = eyelidColor,
-                start = Offset(eyeCenter.x - eyeRadius * 0.8f, eyeCenter.y - eyeRadius * 0.4f),
-                end = Offset(eyeCenter.x + eyeRadius * 0.8f, eyeCenter.y - eyeRadius * 0.4f),
-                strokeWidth = eyelidThickness
-            )
-            // Bottom eyelid
-            drawLine(
-                color = eyelidColor,
-                start = Offset(eyeCenter.x - eyeRadius * 0.8f, eyeCenter.y + eyeRadius * 0.4f),
-                end = Offset(eyeCenter.x + eyeRadius * 0.8f, eyeCenter.y + eyeRadius * 0.4f),
-                strokeWidth = eyelidThickness
+                radius = pupilSize,
+                center = center.copy(x = center.x + offsetX, y = center.y + offsetY)
             )
         }
     }
 }
 
-// Composable function for the directional control buttons.
 @Composable
-fun DirectionalButtons(onDirectionSelected: (dx: Float, dy: Float) -> Unit) {
-    val buttonSize = 60.dp // Size of each button
-    val buttonPadding = 8.dp // Padding between buttons
-
-    // Define the directions as pairs of (dx, dy)
-    // dx: -1 for left, 0 for center, 1 for right
-    // dy: -1 for up, 0 for center, 1 for down
-    val directions = listOf(
-        // Top row
-        Pair(-1f, -1f), Pair(0f, -1f), Pair(1f, -1f),
-        // Middle row (Left and Right)
-        Pair(-1f, 0f), /* No center button here */ Pair(1f, 0f),
-        // Bottom row
-        Pair(-1f, 1f), Pair(0f, 1f), Pair(1f, 1f)
-    )
-
-    // Helper to get the correct index for the button grid
-    fun getButtonIndex(row: Int, col: Int): Int? {
-        return when (row) {
-            0 -> col // 0, 1, 2 for top row
-            1 -> when (col) { // 3, 4 for middle row (skipping center)
-                0 -> 3
-                2 -> 4
-                else -> null // No button in center column for middle row
-            }
-            2 -> col + 5 // 5, 6, 7 for bottom row
-            else -> null
+fun DirectionControls(onDirectionClick: (Float, Float) -> Unit) {
+    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        ControlButton("↑") { onDirectionClick(0f, -15f) }
+        Row {
+            ControlButton("←") { onDirectionClick(-15f, 0f) }
+            Spacer(modifier = Modifier.width(40.dp))
+            ControlButton("→") { onDirectionClick(15f, 0f) }
         }
-    }
-
-    Column(
-        horizontalAlignment = Alignment.CenterHorizontally,
-        modifier = Modifier.padding(16.dp)
-    ) {
-        // Top row of buttons
-        Row(horizontalArrangement = Arrangement.spacedBy(buttonPadding)) {
-            DirectionButton(dx = -1f, dy = -1f, buttonSize, onDirectionSelected) // Up-Left
-            DirectionButton(dx = 0f, dy = -1f, buttonSize, onDirectionSelected)  // Up
-            DirectionButton(dx = 1f, dy = -1f, buttonSize, onDirectionSelected)  // Up-Right
-        }
-        Spacer(modifier = Modifier.height(buttonPadding))
-
-        // Middle row of buttons (Left and Right)
-        Row(horizontalArrangement = Arrangement.spacedBy(buttonPadding)) {
-            DirectionButton(dx = -1f, dy = 0f, buttonSize, onDirectionSelected) // Left
-            Spacer(modifier = Modifier.width(buttonSize + buttonPadding * 2)) // Empty space for eye position
-            DirectionButton(dx = 1f, dy = 0f, buttonSize, onDirectionSelected)  // Right
-        }
-        Spacer(modifier = Modifier.height(buttonPadding))
-
-        // Bottom row of buttons
-        Row(horizontalArrangement = Arrangement.spacedBy(buttonPadding)) {
-            DirectionButton(dx = -1f, dy = 1f, buttonSize, onDirectionSelected) // Down-Left
-            DirectionButton(dx = 0f, dy = 1f, buttonSize, onDirectionSelected)  // Down
-            DirectionButton(dx = 1f, dy = 1f, buttonSize, onDirectionSelected)  // Down-Right
-        }
+        ControlButton("↓") { onDirectionClick(0f, 15f) }
     }
 }
 
-// Composable function for a single directional button.
 @Composable
-fun DirectionButton(
-    dx: Float,
-    dy: Float,
-    size: Dp,
-    onDirectionSelected: (dx: Float, dy: Float) -> Unit
-) {
-    Button(
-        onClick = { onDirectionSelected(dx, dy) },
+fun ControlButton(label: String, onClick: () -> Unit) {
+    Box(
         modifier = Modifier
-            .size(size)
-            .clip(CircleShape), // Make buttons circular
-        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
+            .size(50.dp)
+            .clip(CircleShape)
+            .background(Color.Red)
+            .clickable { onClick() }
+            .padding(12.dp),
+        contentAlignment = Alignment.Center
     ) {
-        // You can add an icon or text to indicate direction if needed.
-        // For now, they are just red circles as per the image.
+        Text(label, color = Color.White)
     }
+    Spacer(modifier = Modifier.height(8.dp))
 }
 
-// Preview function for the EyeMovementScreen Composable.
-@Preview(showBackground = true, widthDp = 360, heightDp = 640)
 @Composable
-fun PreviewEyeMovementScreen() {
-    EyeMovementAppTheme {
-        EyeMovementScreen()
+fun TorchControls(onTorchClick: (String) -> Unit) {
+    Row(horizontalArrangement = Arrangement.SpaceEvenly, modifier = Modifier.fillMaxWidth().padding(16.dp)) {
+        Button(onClick = { onTorchClick("left") }) {
+            Text("Torch Left Eye")
+        }
+        Button(onClick = { onTorchClick("right") }) {
+            Text("Torch Right Eye")
+        }
     }
 }
